@@ -47,22 +47,7 @@
 /* ---------- Brand ---------- */
 .brand {
     display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    font-weight: 700;
-    font-size: 20px;
-    letter-spacing: -0.01em;
-}
-
-.brand-light { color: #fff; }
-
-.brand-mark {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.16);
-    display: grid;
-    place-items: center;
+    color: #fff;
 }
 
 /* ---------- Buttons & inputs ---------- */
@@ -217,7 +202,7 @@
     overflow-y: auto;
 }
 
-.sidebar .brand { padding: 0 8px; }
+.sidebar .brand { padding: 4px 8px; }
 .sidebar nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
 
 .side-link {

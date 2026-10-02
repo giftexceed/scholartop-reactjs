@@ -1,32 +1,21 @@
 import { useState } from 'react'
-import { useLiveQuery } from 'dexie-react-hooks'
 import { useAuth } from '../../auth/AuthContext'
-import { db } from '../../db/db'
+import { createAnnouncement, deleteAnnouncement, listAnnouncements, listPrograms } from '../../data/api'
+import { useLiveData } from '../../data/useLiveData'
+import { formatDate, timeAgo } from '../../lib/dates'
 import { Badge, Empty, Icon, Modal, PageHeader } from '../components/ui'
-import { formatDate, timeAgo } from '../format'
 
 export default function Announcements() {
     const { user } = useAuth()
     const isAdmin = user.role === 'admin'
     const [composing, setComposing] = useState(false)
+    const items = useLiveData(() => listAnnouncements(), [user.id])
 
-    const data = useLiveQuery(async () => {
-        const [items, programs, student] = await Promise.all([
-            db.announcements.orderBy('createdAt').reverse().toArray(),
-            db.programs.toArray(),
-            user.studentId ? db.students.get(user.studentId) : null,
-        ])
-        const myProgram = programs.find((p) => p.id === student?.programId)?.name
-        return {
-            programs,
-            items: isAdmin ? items : items.filter((a) => a.audience === 'All' || a.audience === myProgram),
-        }
-    }, [isAdmin, user.studentId])
-
-    if (!data) return <div className='page-loader' />
+    if (!items) return <div className='page-loader' />
 
     const onDelete = async (a) => {
-        if (confirm(`Delete "${a.title}"?`)) await db.announcements.delete(a.id)
+        if (!confirm(`Delete "${a.title}"?`)) return
+        try { await deleteAnnouncement(a.id) } catch (err) { alert(err.message) }
     }
 
     return (
@@ -35,9 +24,9 @@ export default function Announcements() {
                 {isAdmin && <button className='button primary' onClick={() => setComposing(true)}><Icon name='plus' size={18} /> New announcement</button>}
             </PageHeader>
 
-            {data.items.length ? (
+            {items.length ? (
                 <div className='stack'>
-                    {data.items.map((a) => (
+                    {items.map((a) => (
                         <article key={a.id} className='card announcement'>
                             <div className='card-title-row'>
                                 <h2 className='card-title'>{a.title}</h2>
@@ -56,23 +45,23 @@ export default function Announcements() {
                 </div>
             ) : <div className='card'><Empty>No announcements yet.</Empty></div>}
 
-            {composing && <Composer programs={data.programs} authorId={user.id} onClose={() => setComposing(false)} />}
+            {composing && <Composer onClose={() => setComposing(false)} />}
         </>
     )
 }
 
-function Composer({ programs, authorId, onClose }) {
+function Composer({ onClose }) {
+    const programs = useLiveData(listPrograms, [], [])
+    const [error, setError] = useState('')
+
     const onSubmit = async (e) => {
         e.preventDefault()
-        const f = Object.fromEntries(new FormData(e.currentTarget))
-        await db.announcements.add({
-            title: f.title.trim(),
-            body: f.body.trim(),
-            audience: f.audience,
-            authorId,
-            createdAt: new Date().toISOString(),
-        })
-        onClose()
+        try {
+            await createAnnouncement(Object.fromEntries(new FormData(e.currentTarget)))
+            onClose()
+        } catch (err) {
+            setError(err.message)
+        }
     }
 
     return (
@@ -87,6 +76,7 @@ function Composer({ programs, authorId, onClose }) {
                         {programs.map((p) => <option key={p.id} value={p.name}>{p.name} students</option>)}
                     </select>
                 </label>
+                {error && <p className='form-error' role='alert'>{error}</p>}
                 <div className='form-actions'>
                     <button type='button' className='button' onClick={onClose}>Cancel</button>
                     <button className='button primary'>Publish</button>

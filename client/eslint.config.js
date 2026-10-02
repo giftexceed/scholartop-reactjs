@@ -26,4 +26,22 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    // UI code must go through src/data/api (+ useLiveData) so the storage
+    // backend can be swapped without touching components.
+    files: ['src/**/*.{js,jsx}'],
+    ignores: ['src/data/**'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [
+          { name: 'dexie', message: 'Use the data API in src/data/api instead.' },
+          { name: 'dexie-react-hooks', message: 'Use useLiveData from src/data/useLiveData instead.' },
+        ],
+        patterns: [
+          { group: ['**/data/local/*', '**/data/local'], message: 'Use the data API in src/data/api instead.' },
+          { group: ['**/data/api/_context'], message: 'Internal to the data layer.' },
+        ],
+      }],
+    },
+  },
 ])

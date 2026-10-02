@@ -1,40 +1,26 @@
 import { useState } from 'react'
-import { useLiveQuery } from 'dexie-react-hooks'
-import { db, todayISO } from '../../db/db'
+import { ATTENDANCE_STATUSES, getRegister, listPrograms, markAttendance } from '../../data/api'
+import { useLiveData } from '../../data/useLiveData'
+import { todayISO } from '../../lib/dates'
 import { Avatar, Empty, PageHeader } from '../components/ui'
-
-const STATUSES = ['Present', 'Late', 'Absent']
-
-async function mark(studentId, date, status) {
-    await db.transaction('rw', db.attendance, async () => {
-        const existing = await db.attendance.where({ studentId, date }).first()
-        if (existing) await db.attendance.update(existing.id, { status })
-        else await db.attendance.add({ studentId, date, status })
-    })
-}
 
 export default function Attendance() {
     const [date, setDate] = useState(todayISO)
     const [programId, setProgramId] = useState('')
 
-    const programs = useLiveQuery(() => db.programs.toArray(), [])
-    const data = useLiveQuery(async () => {
-        const [students, records] = await Promise.all([
-            db.students.where('status').equals('Active').toArray(),
-            db.attendance.where('date').equals(date).toArray(),
-        ])
-        return { students, byStudent: Object.fromEntries(records.map((r) => [r.studentId, r.status])) }
-    }, [date])
+    const programs = useLiveData(listPrograms)
+    const register = useLiveData(() => getRegister(date), [date])
 
-    if (!data || !programs) return <div className='page-loader' />
+    if (!register || !programs) return <div className='page-loader' />
 
-    const students = data.students
-        .filter((s) => !programId || s.programId === Number(programId))
-        .sort((a, b) => a.name.localeCompare(b.name))
-    const counts = Object.fromEntries(STATUSES.map((s) => [s, students.filter((st) => data.byStudent[st.id] === s).length]))
-    const unmarked = students.filter((s) => !data.byStudent[s.id])
+    const { statusByStudent } = register
+    const students = register.students.filter((s) => !programId || s.programId === programId)
+    const counts = Object.fromEntries(ATTENDANCE_STATUSES.map((s) => [s, students.filter((st) => statusByStudent[st.id] === s).length]))
+    const unmarked = students.filter((s) => !statusByStudent[s.id])
 
-    const markAllPresent = () => Promise.all(unmarked.map((s) => mark(s.id, date, 'Present')))
+    const mark = async (ids, status) => {
+        try { await markAttendance(ids, date, status) } catch (err) { alert(err.message) }
+    }
 
     return (
         <>
@@ -49,10 +35,12 @@ export default function Attendance() {
             <section className='card'>
                 <div className='card-title-row'>
                     <div className='att-summary'>
-                        {STATUSES.map((s) => <span key={s} className={`att-count att-${s.toLowerCase()}`}><strong>{counts[s]}</strong> {s}</span>)}
+                        {ATTENDANCE_STATUSES.map((s) => <span key={s} className='att-count'><strong>{counts[s]}</strong> {s}</span>)}
                         <span className='att-count'><strong>{unmarked.length}</strong> Unmarked</span>
                     </div>
-                    <button className='button' onClick={markAllPresent} disabled={!unmarked.length}>Mark unmarked as present</button>
+                    <button className='button' onClick={() => mark(unmarked.map((s) => s.id), 'Present')} disabled={!unmarked.length}>
+                        Mark unmarked as present
+                    </button>
                 </div>
 
                 {students.length ? (
@@ -64,14 +52,14 @@ export default function Attendance() {
                                     <div><strong>{s.name}</strong><div className='muted small mono'>{s.matric}</div></div>
                                 </div>
                                 <div className='segmented' role='radiogroup' aria-label={`Attendance for ${s.name}`}>
-                                    {STATUSES.map((status) => (
+                                    {ATTENDANCE_STATUSES.map((status) => (
                                         <button
                                             key={status}
                                             type='button'
                                             role='radio'
-                                            aria-checked={data.byStudent[s.id] === status}
+                                            aria-checked={statusByStudent[s.id] === status}
                                             className={`seg seg-${status.toLowerCase()}`}
-                                            onClick={() => mark(s.id, date, status)}
+                                            onClick={() => mark(s.id, status)}
                                         >
                                             {status}
                                         </button>

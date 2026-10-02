@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import './Navbar.css'
-import logo from '../../assets/logo.webp'
+import BrandLogo from '../BrandLogo/BrandLogo'
+import { SITE } from '../../config/site'
 import menu_icon from '../../assets/menu-icon.webp'
 
 const LINKS = [
@@ -27,8 +28,8 @@ const Navbar = () => {
 
     return (
         <nav className={`site-nav container ${sticky ? 'dark-nav' : ''}`}>
-            <a href="#hero" aria-label="EasyPoint home">
-                <img src={logo} alt="EasyPoint" className='logo' width="180" height="37" />
+            <a href="#hero" className='logo' aria-label={`${SITE.name} home`}>
+                <BrandLogo size='lg' />
             </a>
             <ul className={mobileMenu ? '' : 'hide-mobile-menu'}>
                 {LINKS.map(([href, label]) => (

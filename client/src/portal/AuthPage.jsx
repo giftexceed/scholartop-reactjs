@@ -1,19 +1,17 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useLiveQuery } from 'dexie-react-hooks'
 import { useAuth } from '../auth/AuthContext'
-import { db } from '../db/db'
-import { DEMO_ADMIN, DEMO_STUDENT } from '../db/seed'
-import { Icon } from './components/ui'
-
-const LEVELS = { UGD: [100, 200, 300, 400], MSC: [700], PGD: [800] }
+import { DEMO_ADMIN, DEMO_STUDENT, listPrograms } from '../data/api'
+import { useLiveData } from '../data/useLiveData'
+import { SITE } from '../config/site'
+import BrandLogo from '../Components/BrandLogo/BrandLogo'
 
 export default function AuthPage({ mode }) {
     const isLogin = mode === 'login'
     const { login, register } = useAuth()
     const navigate = useNavigate()
     const location = useLocation()
-    const programs = useLiveQuery(() => db.programs.toArray(), [])
+    const programs = useLiveData(listPrograms)
     const [error, setError] = useState('')
     const [busy, setBusy] = useState(false)
     const [programId, setProgramId] = useState('')
@@ -43,18 +41,18 @@ export default function AuthPage({ mode }) {
             email: f.email,
             phone: f.phone.trim(),
             password: f.password,
-            programId: Number(f.programId),
+            programId: f.programId,
             level: Number(f.level),
         }))
     }
 
-    const selectedProgram = programs?.find((p) => p.id === Number(programId))
+    const selectedProgram = programs?.find((p) => p.id === programId)
 
     return (
         <div className='auth-page'>
             <aside className='auth-aside'>
-                <Link to='/' className='brand brand-light'>
-                    <span className='brand-mark'><Icon name='student' size={22} /></span> EasyPoint
+                <Link to='/' className='brand' aria-label={`${SITE.name} home`}>
+                    <BrandLogo />
                 </Link>
                 <div>
                     <h2>Student &amp; staff portal</h2>
@@ -100,7 +98,7 @@ export default function AuthPage({ mode }) {
                             <label className='field'>
                                 <span>Level</span>
                                 <select name='level' required disabled={!selectedProgram} key={programId}>
-                                    {(LEVELS[selectedProgram?.code] || []).map((l) => <option key={l} value={l}>{l}</option>)}
+                                    {(selectedProgram?.levels || []).map((l) => <option key={l} value={l}>{l}</option>)}
                                 </select>
                             </label>
                         </div>

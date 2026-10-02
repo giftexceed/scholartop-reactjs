@@ -5,26 +5,20 @@ import mail_icon from '../../assets/mail-icon.webp'
 import phone_icon from '../../assets/phone-icon.webp'
 import location_icon from '../../assets/location-icon.webp'
 import white_arrow from '../../assets/white-arrow.webp'
+import { SITE } from '../../config/site'
 
 const Contact = () => {
     const [result, setResult] = useState("");
 
-    // Messages are stored in the local IndexedDB and appear in the dashboard inbox.
-    // The DB module is loaded on demand so it doesn't weigh down the landing page.
+    // Goes through the data API and appears in the dashboard inbox. The data layer
+    // is loaded on demand so it doesn't weigh down the landing page.
     const onSubmit = async (event) => {
         event.preventDefault();
         const form = event.currentTarget;
         setResult("Sending....");
         try {
-            const { db } = await import('../../db/db');
-            const data = Object.fromEntries(new FormData(form));
-            await db.messages.add({
-                name: data.name.trim(),
-                phone: data.phone.trim(),
-                message: data.message.trim(),
-                read: 0,
-                createdAt: new Date().toISOString(),
-            });
+            const { sendContactMessage } = await import('../../data/api/messages');
+            await sendContactMessage(Object.fromEntries(new FormData(form)));
             setResult("Form Submitted Successfully");
             form.reset();
         } catch {
@@ -42,15 +36,15 @@ const Contact = () => {
                 <ul>
                     <li>
                         <img src={mail_icon} alt="" width="25" height="19" loading="lazy" />
-                        <a href="mailto:contact@easypoint.com.ng">contact@easypoint.com.ng</a>
+                        <a href={`mailto:${SITE.email}`}>{SITE.email}</a>
                     </li>
                     <li>
                         <img src={phone_icon} alt="" width="25" height="25" loading="lazy" />
-                        <a href="tel:+2347035923194">+2347035923194</a>
+                        <a href={`tel:${SITE.phone}`}>{SITE.phone}</a>
                     </li>
                     <li>
                         <img src={location_icon} alt="" width="25" height="34" loading="lazy" />
-                        Abuja Nigeria
+                        {SITE.location}
                     </li>
                 </ul>
             </div>

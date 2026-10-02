@@ -14,9 +14,8 @@
 }
 
 .logo {
-    width: 180px;
-    height: auto;
     display: block;
+    color: #fff;
 }
 
 .site-nav ul li {
@@ -46,7 +45,7 @@
 
 @media (max-width:1000px) {
     .logo {
-        width: 140px;
+        font-size: 0.9em;
     }
 
     .site-nav ul li {

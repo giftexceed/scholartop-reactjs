@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from '../../db/db'
+import { deleteMessage, listMessages, markAllMessagesRead, markMessageRead } from '../../data/api'
+import { useLiveData } from '../../data/useLiveData'
+import { formatDate, timeAgo } from '../../lib/dates'
 import { Avatar, Empty, Icon, PageHeader } from '../components/ui'
-import { formatDate, timeAgo } from '../format'
+
+const report = (err) => alert(err.message)
 
 export default function Messages() {
-    const messages = useLiveQuery(() => db.messages.orderBy('createdAt').reverse().toArray(), [])
+    const messages = useLiveData(listMessages)
     const [openId, setOpenId] = useState(null)
 
     if (!messages) return <div className='page-loader' />
@@ -13,17 +15,17 @@ export default function Messages() {
 
     const toggle = (m) => {
         setOpenId(openId === m.id ? null : m.id)
-        if (!m.read) db.messages.update(m.id, { read: 1 })
+        if (!m.read) markMessageRead(m.id).catch(report)
     }
 
-    const remove = async (m) => {
-        if (confirm(`Delete the message from ${m.name}?`)) await db.messages.delete(m.id)
+    const remove = (m) => {
+        if (confirm(`Delete the message from ${m.name}?`)) deleteMessage(m.id).catch(report)
     }
 
     return (
         <>
             <PageHeader title='Inbox' subtitle='Messages sent through the website contact form.'>
-                <button className='button' disabled={!unread.length} onClick={() => db.messages.where('read').equals(0).modify({ read: 1 })}>
+                <button className='button' disabled={!unread.length} onClick={() => markAllMessagesRead().catch(report)}>
                     <Icon name='check' size={18} /> Mark all as read
                 </button>
             </PageHeader>
@@ -43,7 +45,7 @@ export default function Messages() {
                                 </button>
                                 {openId === m.id && (
                                     <div className='inbox-detail'>
-                                        <a className='button' href={`tel:${m.phone}`}>Call {m.phone}</a>
+                                        {m.phone && <a className='button' href={`tel:${m.phone}`}>Call {m.phone}</a>}
                                         <button className='button danger' onClick={() => remove(m)}><Icon name='trash' size={18} /> Delete</button>
                                     </div>
                                 )}

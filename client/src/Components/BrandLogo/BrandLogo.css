@@ -1,0 +1,37 @@
+.brand-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: inherit;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.brand-logo svg {
+    width: 1.45em;
+    height: 1.45em;
+    flex-shrink: 0;
+}
+
+.brand-logo-text {
+    font-weight: 400;
+    letter-spacing: -0.01em;
+}
+
+.brand-logo-text b {
+    font-weight: 700;
+}
+
+.brand-logo-md {
+    font-size: 22px;
+}
+
+.brand-logo-lg {
+    font-size: 28px;
+}
+
+@media (max-width: 1000px) {
+    .brand-logo-lg {
+        font-size: 24px;
+    }
+}

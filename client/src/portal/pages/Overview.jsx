@@ -1,13 +1,13 @@
 import { Link } from 'react-router-dom'
-import { useLiveQuery } from 'dexie-react-hooks'
 import { useAuth } from '../../auth/AuthContext'
-import { computeGPA, db, gradeFor } from '../../db/db'
+import { getAdminOverview, getStudentRecord, listAnnouncements } from '../../data/api'
+import { useLiveData } from '../../data/useLiveData'
+import { attendanceRate, computeGPA, gradeFor } from '../../lib/grading'
+import { formatDate, timeAgo } from '../../lib/dates'
 import { BarList, ColumnChart } from '../components/charts'
 import { Avatar, Badge, Empty, PageHeader, StatTile } from '../components/ui'
-import { formatDate, timeAgo } from '../format'
 
 const pct = (v) => `${v}%`
-const GRADES = ['A', 'B', 'C', 'D', 'E', 'F']
 
 export default function Overview() {
     const { user } = useAuth()
@@ -19,66 +19,35 @@ function greeting() {
     return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
 }
 
-function attendanceRate(rows) {
-    if (!rows.length) return 0
-    const present = rows.filter((r) => r.status !== 'Absent').length
-    return Math.round((present / rows.length) * 100)
-}
-
 function AdminOverview({ user }) {
-    const data = useLiveQuery(async () => {
-        const [students, programs, courses, enrollments, attendance, announcements, unread] = await Promise.all([
-            db.students.toArray(),
-            db.programs.toArray(),
-            db.courses.count(),
-            db.enrollments.toArray(),
-            db.attendance.toArray(),
-            db.announcements.orderBy('createdAt').reverse().limit(3).toArray(),
-            db.messages.where('read').equals(0).count(),
-        ])
-        return { students, programs, courses, enrollments, attendance, announcements, unread }
-    }, [])
+    const overview = useLiveData(getAdminOverview)
+    const announcements = useLiveData(() => listAnnouncements({ limit: 3 }), [user.id])
 
-    if (!data) return <div className='page-loader' />
-    const { students, programs, courses, enrollments, attendance, announcements, unread } = data
+    if (!overview || !announcements) return <div className='page-loader' />
+    const { totals, dailyAttendance, gradeDistribution, studentsByProgram, newestStudents } = overview
 
-    const active = students.filter((s) => s.status === 'Active').length
-
-    const byDate = {}
-    for (const a of attendance) (byDate[a.date] ??= []).push(a)
-    const days = Object.keys(byDate).sort().slice(-10)
-    const attendanceSeries = days.map((d) => ({
-        label: d,
-        short: formatDate(d, { day: 'numeric', month: 'short' }),
-        tip: formatDate(d, { weekday: 'long', day: 'numeric', month: 'long' }),
-        value: attendanceRate(byDate[d]),
+    const attendanceSeries = dailyAttendance.map((d) => ({
+        label: d.date,
+        short: formatDate(d.date, { day: 'numeric', month: 'short' }),
+        tip: formatDate(d.date, { weekday: 'long', day: 'numeric', month: 'long' }),
+        value: d.rate,
     }))
-    const overallAttendance = attendanceRate(days.flatMap((d) => byDate[d]))
-
-    const byProgram = programs.map((p) => {
-        const n = students.filter((s) => s.programId === p.id).length
-        return { label: p.name, value: n, tip: `${Math.round((n / (students.length || 1)) * 100)}% of all students` }
-    })
-
-    const graded = enrollments.filter((e) => e.score != null)
-    const gradeCounts = GRADES.map((g) => ({
-        label: g,
-        value: graded.filter((e) => gradeFor(e.score) === g).length,
-        tip: `Grade ${g} results`,
+    const gradeSeries = gradeDistribution.map((g) => ({ label: g.grade, value: g.count, tip: `Grade ${g.grade} results` }))
+    const programSeries = studentsByProgram.map((p) => ({
+        label: p.program,
+        value: p.count,
+        tip: `${Math.round((p.count / (totals.students || 1)) * 100)}% of all students`,
     }))
-
-    const newest = [...students].sort((a, b) => b.enrolledAt.localeCompare(a.enrolledAt)).slice(0, 5)
-    const programName = Object.fromEntries(programs.map((p) => [p.id, p.name]))
 
     return (
         <>
             <PageHeader title={`${greeting()}, ${user.name.split(' ')[0]}`} subtitle="Here's what's happening across campus." />
 
             <div className='stat-grid'>
-                <StatTile icon='users' label='Active students' value={active} hint={`${students.length} enrolled in total`} />
-                <StatTile icon='book' label='Courses' value={courses} hint={`across ${programs.length} programs`} />
-                <StatTile icon='calendar' label='Attendance' value={pct(overallAttendance)} hint={`last ${days.length} school days`} />
-                <StatTile icon='inbox' label='Unread messages' value={unread} hint={<Link to='/dashboard/messages'>Open inbox →</Link>} />
+                <StatTile icon='users' label='Active students' value={totals.activeStudents} hint={`${totals.students} enrolled in total`} />
+                <StatTile icon='book' label='Courses' value={totals.courses} hint={`across ${totals.programs} programs`} />
+                <StatTile icon='calendar' label='Attendance' value={pct(totals.attendanceRate)} hint={`last ${totals.attendanceDays} school days`} />
+                <StatTile icon='inbox' label='Unread messages' value={totals.unreadMessages} hint={<Link to='/dashboard/messages'>Open inbox →</Link>} />
             </div>
 
             <div className='grid-2'>
@@ -91,15 +60,15 @@ function AdminOverview({ user }) {
                 </section>
                 <section className='card'>
                     <h2 className='card-title'>Grade distribution</h2>
-                    <p className='card-sub'>{graded.length} graded course results this session</p>
-                    <ColumnChart data={gradeCounts} showValues label='Grade distribution' />
+                    <p className='card-sub'>{totals.gradedResults} graded course results this session</p>
+                    <ColumnChart data={gradeSeries} showValues label='Grade distribution' />
                 </section>
             </div>
 
             <div className='grid-3'>
                 <section className='card'>
                     <h2 className='card-title'>Students by program</h2>
-                    <BarList data={byProgram} />
+                    <BarList data={programSeries} />
                 </section>
                 <section className='card'>
                     <div className='card-title-row'>
@@ -107,12 +76,12 @@ function AdminOverview({ user }) {
                         <Link to='/dashboard/students' className='link'>View all</Link>
                     </div>
                     <ul className='people-list'>
-                        {newest.map((s) => (
+                        {newestStudents.map((s) => (
                             <li key={s.id}>
                                 <Avatar name={s.name} size={32} />
                                 <div>
                                     <strong>{s.name}</strong>
-                                    <span>{programName[s.programId]} · {s.level}L</span>
+                                    <span>{s.program} · {s.level}L</span>
                                 </div>
                             </li>
                         ))}
@@ -131,28 +100,15 @@ function AdminOverview({ user }) {
 }
 
 function StudentOverview({ user }) {
-    const data = useLiveQuery(async () => {
-        const student = user.studentId ? await db.students.get(user.studentId) : null
-        if (!student) return { student: null }
-        const [program, enrollments, attendance, announcements] = await Promise.all([
-            db.programs.get(student.programId),
-            db.enrollments.where('studentId').equals(student.id).toArray(),
-            db.attendance.where('studentId').equals(student.id).sortBy('date'),
-            db.announcements.orderBy('createdAt').reverse().toArray(),
-        ])
-        const courses = await db.courses.bulkGet(enrollments.map((e) => e.courseId))
-        const results = enrollments.map((e, i) => ({ ...e, ...courses[i], id: e.id })).filter((r) => r.code)
-        return {
-            student, program, results, attendance,
-            announcements: announcements.filter((a) => a.audience === 'All' || a.audience === program?.name).slice(0, 4),
-        }
-    }, [user.studentId])
+    // null = no linked student record; undefined = loading
+    const record = useLiveData(() => (user.studentId ? getStudentRecord(user.studentId) : null), [user.studentId])
+    const announcements = useLiveData(() => listAnnouncements({ limit: 4 }), [user.id])
 
-    if (!data) return <div className='page-loader' />
-    if (!data.student) {
+    if (record === undefined || !announcements) return <div className='page-loader' />
+    if (!record) {
         return <Empty>Your account isn't linked to a student record yet. Please contact the registrar.</Empty>
     }
-    const { student, program, results, attendance, announcements } = data
+    const { student, program, results, attendance } = record
     const units = results.reduce((n, r) => n + r.units, 0)
     const recent = attendance.slice(-10)
 
@@ -175,7 +131,7 @@ function StudentOverview({ user }) {
                             <thead><tr><th>Course</th><th className='num'>Units</th><th className='num'>Score</th><th>Grade</th></tr></thead>
                             <tbody>
                                 {results.map((r) => (
-                                    <tr key={r.id}>
+                                    <tr key={r.enrollmentId}>
                                         <td><strong>{r.code}</strong><div className='muted small'>{r.title}</div></td>
                                         <td className='num'>{r.units}</td>
                                         <td className='num'>{r.score ?? '—'}</td>

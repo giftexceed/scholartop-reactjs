@@ -1,22 +1,34 @@
-import React from 'react'
+import React, { Suspense, lazy, useState } from 'react'
 import './Campus.css'
-import gallery_1 from '../../assets/gallery-1.webp'
-import gallery_2 from '../../assets/gallery-2.webp'
-import gallery_3 from '../../assets/gallery-3.webp'
-import gallery_4 from '../../assets/gallery-4.webp'
 import white_arrow from '../../assets/white-arrow.webp'
+import { PHOTOS } from '../Gallery/photos'
 
-const PHOTOS = [gallery_1, gallery_2, gallery_3, gallery_4]
+// Loaded only when someone opens the gallery.
+const GalleryModal = lazy(() => import('../Gallery/GalleryModal'))
+
+const PREVIEW = PHOTOS.slice(0, 4)
 
 const Campus = () => {
+    // null = closed; { start: null } = grid; { start: n } = photo n in the lightbox
+    const [gallery, setGallery] = useState(null)
+
     return (
         <div className='campus'>
             <div className="gallery">
-                {PHOTOS.map((src, i) => (
-                    <img key={src} src={src} alt={`Campus photo ${i + 1}`} width="467" height="588" loading="lazy" decoding="async" />
+                {PREVIEW.map((p, i) => (
+                    <button key={p.src} type="button" className="gallery-thumb" onClick={() => setGallery({ start: i })} aria-label={`View ${p.alt}`}>
+                        <img src={p.src} alt="" width={p.width} height={p.height} loading="lazy" decoding="async" />
+                    </button>
                 ))}
             </div>
-            <button className='btn dark-btn'>See more here <img src={white_arrow} alt="" width="20" height="11" /></button>
+            <button className='btn dark-btn' onClick={() => setGallery({ start: null })}>
+                See more here <img src={white_arrow} alt="" width="20" height="11" />
+            </button>
+            {gallery && (
+                <Suspense fallback={null}>
+                    <GalleryModal startIndex={gallery.start} onClose={() => setGallery(null)} />
+                </Suspense>
+            )}
         </div>
     )
 }

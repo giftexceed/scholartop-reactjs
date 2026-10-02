@@ -1,46 +1,12 @@
 import { useMemo, useState } from 'react'
-import { useLiveQuery } from 'dexie-react-hooks'
-import { db, nextMatric } from '../../db/db'
+import { STUDENT_STATUSES, createStudent, deleteStudent, listPrograms, listStudents, updateStudent } from '../../data/api'
+import { useLiveData } from '../../data/useLiveData'
+import { formatDate } from '../../lib/dates'
 import { Avatar, Badge, Empty, Icon, Modal, PageHeader } from '../components/ui'
-import { formatDate } from '../format'
-
-const LEVELS = { UGD: [100, 200, 300, 400], MSC: [700], PGD: [800] }
-const STATUSES = ['Active', 'Suspended', 'Graduated']
-
-async function enrollInProgram(studentId, programId) {
-    const courses = await db.courses.where('programId').equals(programId).toArray()
-    await db.enrollments.bulkAdd(courses.map((c) => ({ studentId, courseId: c.id, score: null })))
-}
-
-async function saveStudent(existing, values) {
-    await db.transaction('rw', db.students, db.users, db.courses, db.enrollments, async () => {
-        if (!existing) {
-            const id = await db.students.add({ ...values, matric: await nextMatric(), enrolledAt: new Date().toISOString() })
-            await enrollInProgram(id, values.programId)
-            return
-        }
-        await db.students.update(existing.id, values)
-        if (existing.programId !== values.programId) {
-            await db.enrollments.where('studentId').equals(existing.id).delete()
-            await enrollInProgram(existing.id, values.programId)
-        }
-        // Keep the linked login account's contact details in sync.
-        if (existing.userId) await db.users.update(existing.userId, { name: values.name, phone: values.phone })
-    })
-}
-
-async function deleteStudent(s) {
-    await db.transaction('rw', db.students, db.users, db.enrollments, db.attendance, async () => {
-        await db.enrollments.where('studentId').equals(s.id).delete()
-        await db.attendance.where('studentId').equals(s.id).delete()
-        if (s.userId) await db.users.update(s.userId, { studentId: null })
-        await db.students.delete(s.id)
-    })
-}
 
 export default function Students() {
-    const students = useLiveQuery(() => db.students.toArray(), [])
-    const programs = useLiveQuery(() => db.programs.toArray(), [])
+    const students = useLiveData(listStudents)
+    const programs = useLiveData(listPrograms)
     const [query, setQuery] = useState('')
     const [programFilter, setProgramFilter] = useState('')
     const [statusFilter, setStatusFilter] = useState('')
@@ -51,7 +17,7 @@ export default function Students() {
     const rows = useMemo(() => {
         const q = query.trim().toLowerCase()
         return (students || [])
-            .filter((s) => !programFilter || s.programId === Number(programFilter))
+            .filter((s) => !programFilter || s.programId === programFilter)
             .filter((s) => !statusFilter || s.status === statusFilter)
             .filter((s) => !q || [s.name, s.matric, s.email].some((v) => v?.toLowerCase().includes(q)))
             .sort((a, b) => a.name.localeCompare(b.name))
@@ -60,7 +26,8 @@ export default function Students() {
     if (!students || !programs) return <div className='page-loader' />
 
     const onDelete = async (s) => {
-        if (confirm(`Delete ${s.name}? Their results and attendance will also be removed.`)) await deleteStudent(s)
+        if (!confirm(`Delete ${s.name}? Their results and attendance will also be removed.`)) return
+        try { await deleteStudent(s.id) } catch (err) { alert(err.message) }
     }
 
     return (
@@ -81,7 +48,7 @@ export default function Students() {
                     </select>
                     <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label='Filter by status'>
                         <option value=''>Any status</option>
-                        {STATUSES.map((s) => <option key={s}>{s}</option>)}
+                        {STUDENT_STATUSES.map((s) => <option key={s}>{s}</option>)}
                     </select>
                 </div>
 
@@ -131,24 +98,26 @@ export default function Students() {
 function StudentForm({ student, programs, onClose }) {
     const [programId, setProgramId] = useState(student?.programId ?? programs[0]?.id)
     const [error, setError] = useState('')
-    const levels = LEVELS[programs.find((p) => p.id === Number(programId))?.code] || []
+    const levels = programs.find((p) => p.id === programId)?.levels || []
 
     const onSubmit = async (e) => {
         e.preventDefault()
         const f = Object.fromEntries(new FormData(e.currentTarget))
+        const values = {
+            name: f.name.trim(),
+            email: f.email.trim().toLowerCase(),
+            phone: f.phone.trim(),
+            gender: f.gender,
+            programId: f.programId,
+            level: Number(f.level),
+            status: f.status,
+        }
         try {
-            await saveStudent(student, {
-                name: f.name.trim(),
-                email: f.email.trim().toLowerCase(),
-                phone: f.phone.trim(),
-                gender: f.gender,
-                programId: Number(f.programId),
-                level: Number(f.level),
-                status: f.status,
-            })
+            if (student) await updateStudent(student.id, values)
+            else await createStudent(values)
             onClose()
         } catch (err) {
-            setError(err.name === 'ConstraintError' ? 'That record conflicts with an existing student.' : err.message)
+            setError(err.message)
         }
     }
 
@@ -163,7 +132,7 @@ function StudentForm({ student, programs, onClose }) {
                 <div className='field-row'>
                     <label className='field'>
                         <span>Program</span>
-                        <select name='programId' value={programId} onChange={(e) => setProgramId(Number(e.target.value))}>
+                        <select name='programId' value={programId} onChange={(e) => setProgramId(e.target.value)}>
                             {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                     </label>
@@ -184,7 +153,7 @@ function StudentForm({ student, programs, onClose }) {
                     <label className='field'>
                         <span>Status</span>
                         <select name='status' defaultValue={student?.status || 'Active'}>
-                            {STATUSES.map((s) => <option key={s}>{s}</option>)}
+                            {STUDENT_STATUSES.map((s) => <option key={s}>{s}</option>)}
                         </select>
                     </label>
                 </div>

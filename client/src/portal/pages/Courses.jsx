@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useLiveQuery } from 'dexie-react-hooks'
 import { useAuth } from '../../auth/AuthContext'
-import { db } from '../../db/db'
+import { createCourse, getStudentRecord, listCoursesWithStats, listPrograms } from '../../data/api'
+import { useLiveData } from '../../data/useLiveData'
 import { Empty, Icon, Modal, PageHeader } from '../components/ui'
 
 export default function Courses() {
@@ -10,26 +10,14 @@ export default function Courses() {
     const isAdmin = user.role === 'admin'
     const [adding, setAdding] = useState(false)
 
-    const data = useLiveQuery(async () => {
-        const [programs, courses, enrollments, student] = await Promise.all([
-            db.programs.toArray(),
-            db.courses.toArray(),
-            db.enrollments.toArray(),
-            user.studentId ? db.students.get(user.studentId) : null,
-        ])
-        const stats = {}
-        for (const e of enrollments) {
-            const s = (stats[e.courseId] ??= { enrolled: 0, total: 0, graded: 0 })
-            s.enrolled++
-            if (e.score != null) { s.total += e.score; s.graded++ }
-        }
-        return { programs, courses, stats, student }
-    }, [user.studentId])
+    const programs = useLiveData(listPrograms)
+    const courses = useLiveData(listCoursesWithStats)
+    // Students only see their own program.
+    const record = useLiveData(() => (!isAdmin && user.studentId ? getStudentRecord(user.studentId) : null), [isAdmin, user.studentId])
 
-    if (!data) return <div className='page-loader' />
-    const { programs, courses, stats, student } = data
+    if (!programs || !courses || record === undefined) return <div className='page-loader' />
 
-    const visiblePrograms = isAdmin ? programs : programs.filter((p) => p.id === student?.programId)
+    const visiblePrograms = isAdmin ? programs : programs.filter((p) => p.id === record?.student.programId)
 
     return (
         <>
@@ -37,10 +25,10 @@ export default function Courses() {
                 {isAdmin && <button className='button primary' onClick={() => setAdding(true)}><Icon name='plus' size={18} /> New course</button>}
             </PageHeader>
 
-            {visiblePrograms.length === 0 && <Empty>You are not enrolled in a program yet.</Empty>}
+            {visiblePrograms.length === 0 && <div className='card'><Empty>You are not enrolled in a program yet.</Empty></div>}
 
             {visiblePrograms.map((p) => {
-                const list = courses.filter((c) => c.programId === p.id).sort((a, b) => a.code.localeCompare(b.code))
+                const list = courses.filter((c) => c.programId === p.id)
                 return (
                     <section key={p.id} className='card'>
                         <div className='card-title-row'>
@@ -49,22 +37,19 @@ export default function Courses() {
                         </div>
                         {list.length ? (
                             <div className='course-grid'>
-                                {list.map((c) => {
-                                    const s = stats[c.id] || { enrolled: 0, graded: 0, total: 0 }
-                                    return (
-                                        <article key={c.id} className='course-card'>
-                                            <span className='course-code'>{c.code}</span>
-                                            <h3>{c.title}</h3>
-                                            <p className='muted small'>{c.lecturer}</p>
-                                            <dl>
-                                                <div><dt>Units</dt><dd>{c.units}</dd></div>
-                                                {isAdmin && <div><dt>Enrolled</dt><dd>{s.enrolled}</dd></div>}
-                                                {isAdmin && <div><dt>Avg score</dt><dd>{s.graded ? Math.round(s.total / s.graded) : '—'}</dd></div>}
-                                            </dl>
-                                            {isAdmin && <Link className='link small' to={`/dashboard/gradebook?course=${c.id}`}>Open gradebook →</Link>}
-                                        </article>
-                                    )
-                                })}
+                                {list.map((c) => (
+                                    <article key={c.id} className='course-card'>
+                                        <span className='course-code'>{c.code}</span>
+                                        <h3>{c.title}</h3>
+                                        <p className='muted small'>{c.lecturer}</p>
+                                        <dl>
+                                            <div><dt>Units</dt><dd>{c.units}</dd></div>
+                                            {isAdmin && <div><dt>Enrolled</dt><dd>{c.enrolled}</dd></div>}
+                                            {isAdmin && <div><dt>Avg score</dt><dd>{c.averageScore ?? '—'}</dd></div>}
+                                        </dl>
+                                        {isAdmin && <Link className='link small' to={`/dashboard/gradebook?course=${c.id}`}>Open gradebook →</Link>}
+                                    </article>
+                                ))}
                             </div>
                         ) : <Empty>No courses yet.</Empty>}
                     </section>
@@ -82,23 +67,11 @@ function CourseForm({ programs, onClose }) {
     const onSubmit = async (e) => {
         e.preventDefault()
         const f = Object.fromEntries(new FormData(e.currentTarget))
-        const programId = Number(f.programId)
         try {
-            await db.transaction('rw', db.courses, db.students, db.enrollments, async () => {
-                const courseId = await db.courses.add({
-                    code: f.code.trim().toUpperCase(),
-                    title: f.title.trim(),
-                    units: Number(f.units),
-                    lecturer: f.lecturer.trim(),
-                    programId,
-                })
-                // Everyone already in the program takes the new course.
-                const students = await db.students.where('programId').equals(programId).primaryKeys()
-                await db.enrollments.bulkAdd(students.map((studentId) => ({ studentId, courseId, score: null })))
-            })
+            await createCourse({ code: f.code, title: f.title, units: Number(f.units), lecturer: f.lecturer, programId: f.programId })
             onClose()
         } catch (err) {
-            setError(err.name === 'ConstraintError' ? 'A course with that code already exists.' : err.message)
+            setError(err.message)
         }
     }
 

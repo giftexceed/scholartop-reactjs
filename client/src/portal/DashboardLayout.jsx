@@ -1,8 +1,11 @@
 import { useState } from 'react'
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { useLiveQuery } from 'dexie-react-hooks'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { db } from '../db/db'
+import { countUnreadMessages } from '../data/api'
+import { useLiveData } from '../data/useLiveData'
+import { SITE } from '../config/site'
+import BrandLogo from '../Components/BrandLogo/BrandLogo'
+import ErrorBoundary from './components/ErrorBoundary'
 import { Avatar, Icon } from './components/ui'
 
 const NAV = [
@@ -20,9 +23,10 @@ const NAV = [
 export default function DashboardLayout() {
     const { user, logout } = useAuth()
     const navigate = useNavigate()
+    const { pathname } = useLocation()
     const [open, setOpen] = useState(false)
     const isAdmin = user.role === 'admin'
-    const unread = useLiveQuery(() => (isAdmin ? db.messages.where('read').equals(0).count() : 0), [isAdmin], 0)
+    const unread = useLiveData(() => (isAdmin ? countUnreadMessages() : 0), [isAdmin], 0)
 
     const onLogout = () => {
         logout()
@@ -32,8 +36,8 @@ export default function DashboardLayout() {
     return (
         <div className={`dash ${open ? 'nav-open' : ''}`}>
             <aside className='sidebar'>
-                <Link to='/' className='brand brand-light'>
-                    <span className='brand-mark'><Icon name='student' size={22} /></span> EasyPoint
+                <Link to='/' className='brand' aria-label={`${SITE.name} home`}>
+                    <BrandLogo />
                 </Link>
                 <nav aria-label='Dashboard'>
                     {NAV.filter((n) => !n.admin || isAdmin).map((n) => (
@@ -65,7 +69,9 @@ export default function DashboardLayout() {
                     </Link>
                 </header>
                 <main className='dash-content'>
-                    <Outlet />
+                    <ErrorBoundary key={pathname}>
+                        <Outlet />
+                    </ErrorBoundary>
                 </main>
             </div>
         </div>

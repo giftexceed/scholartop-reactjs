@@ -1,22 +1,14 @@
 import { useSearchParams } from 'react-router-dom'
-import { useLiveQuery } from 'dexie-react-hooks'
-import { db, gradeFor } from '../../db/db'
+import { getGradebook, listCoursesWithStats, setScore } from '../../data/api'
+import { useLiveData } from '../../data/useLiveData'
+import { gradeFor } from '../../lib/grading'
 import { Avatar, Badge, Empty, PageHeader } from '../components/ui'
 
 export default function Gradebook() {
     const [params, setParams] = useSearchParams()
-    const courses = useLiveQuery(() => db.courses.orderBy('code').toArray(), [])
-    const courseId = Number(params.get('course')) || courses?.[0]?.id
-
-    const rows = useLiveQuery(async () => {
-        if (!courseId) return []
-        const enrollments = await db.enrollments.where('courseId').equals(courseId).toArray()
-        const students = await db.students.bulkGet(enrollments.map((e) => e.studentId))
-        return enrollments
-            .map((e, i) => ({ ...e, student: students[i] }))
-            .filter((r) => r.student)
-            .sort((a, b) => a.student.name.localeCompare(b.student.name))
-    }, [courseId])
+    const courses = useLiveData(listCoursesWithStats)
+    const courseId = params.get('course') || courses?.[0]?.id
+    const rows = useLiveData(() => getGradebook(courseId), [courseId])
 
     if (!courses || !rows) return <div className='page-loader' />
 
@@ -24,10 +16,10 @@ export default function Gradebook() {
     const graded = rows.filter((r) => r.score != null)
     const avg = graded.length ? Math.round(graded.reduce((n, r) => n + r.score, 0) / graded.length) : null
 
-    const saveScore = (id, raw) => {
+    const saveScore = async (row, raw) => {
         const score = raw === '' ? null : Math.max(0, Math.min(100, Math.round(Number(raw))))
-        if (Number.isNaN(score)) return
-        db.enrollments.update(id, { score })
+        if (Number.isNaN(score) || score === row.score) return
+        try { await setScore(row.enrollmentId, score) } catch (err) { alert(err.message) }
     }
 
     return (
@@ -53,7 +45,7 @@ export default function Gradebook() {
                             <thead><tr><th>Student</th><th>Matric no.</th><th className='num'>Score (0–100)</th><th>Grade</th></tr></thead>
                             <tbody>
                                 {rows.map((r) => (
-                                    <tr key={r.id}>
+                                    <tr key={r.enrollmentId}>
                                         <td><div className='person'><Avatar name={r.student.name} size={28} /><strong>{r.student.name}</strong></div></td>
                                         <td className='mono'>{r.student.matric}</td>
                                         <td className='num'>
@@ -64,8 +56,8 @@ export default function Gradebook() {
                                                 max='100'
                                                 inputMode='numeric'
                                                 defaultValue={r.score ?? ''}
-                                                key={`${r.id}-${r.score}`}
-                                                onBlur={(e) => saveScore(r.id, e.target.value)}
+                                                key={`${r.enrollmentId}-${r.score}`}
+                                                onBlur={(e) => saveScore(r, e.target.value)}
                                                 onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
                                                 aria-label={`Score for ${r.student.name}`}
                                             />
