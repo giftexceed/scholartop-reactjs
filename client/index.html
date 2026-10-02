@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EasyPoint — Better education for a better world</title>
+  <meta name="description" content="EasyPoint university: undergraduate, master's and postgraduate programmes in Abuja, Nigeria. Explore programs, campus life and the student portal." />
+  <meta name="theme-color" content="#212ea0" />
+  <meta property="og:title" content="EasyPoint" />
+  <meta property="og:description" content="We ensure better education for a better world." />
+  <meta property="og:image" content="/hero.webp" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+  <!-- Fonts: connect early, load only the weights in use -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" />
+
+  <!-- Hero background is the LCP element: fetch it before the CSS asks for it -->
+  <link rel="preload" as="image" href="/hero.webp" media="(min-width: 851px)" fetchpriority="high" />
+  <link rel="preload" as="image" href="/hero-sm.webp" media="(max-width: 850px)" fetchpriority="high" />
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
+</html>
