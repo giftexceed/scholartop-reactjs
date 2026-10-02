@@ -37,7 +37,7 @@ Admins can restore the sample data from **My profile → Reset demo data**.
 - Below-the-fold images are lazy-loaded. The video and the gallery load only when opened.
 - The portal and its database code are split into their own chunks, so the landing page
   ships only React plus its own code.
-- Hashed assets are cached for a year (`vercel.json`).
+- Hashed assets are cached for a year (`client/vercel.json`).
 
 ## Project structure
 
@@ -96,6 +96,7 @@ The swap is confined to `client/src/data/`. Components, routes and styles stay u
 
 ## Deploy (Vercel)
 
-`vercel.json` at the repo root installs and builds `client/`, so import the repo with
-Vercel's default settings and leave Root Directory empty. It also provides the SPA
-fallback, so deep links like `/dashboard/students` survive a refresh.
+In the Vercel project settings, set **Root Directory** to `client`. Vercel then
+detects Vite and installs, builds and serves `dist` automatically.
+`client/vercel.json` adds the SPA fallback, so deep links like `/dashboard/students`
+survive a refresh, and long-term caching for hashed assets.
